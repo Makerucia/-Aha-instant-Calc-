@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>아하 속도 계산기</title>
+  <style>
+    :root { color-scheme: light; font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif; color: #192230; background: #f4f6fa; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    main { width: min(100%, 1400px); background: white; border: 1px solid #e3e8f0; border-radius: 20px; padding: 30px; box-shadow: 0 12px 38px #24334c12; }
+    h1 { margin: 0 0 8px; font-size: 1.6rem; letter-spacing: -.03em; }
+    .intro { margin: 0 0 24px; color: #647084; font-size: .95rem; }
+    .table-wrap { width: 100%; overflow-x: auto; }
+    .speed-table { min-width: 720px; }
+    .speed-table-head, .row { display: grid; grid-template-columns: 90px repeat(3, minmax(150px, 1fr)); gap: 12px; align-items: center; }
+    .speed-table-head { padding: 0 0 10px; border-bottom: 1px solid #e3e8f0; color: #647084; font-size: .9rem; font-weight: 650; text-align: left; }
+    .row { margin: 0; padding: 12px 0; border-bottom: 1px solid #edf0f5; }
+    .character { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 8px; }
+    .fields { display: contents; }
+    .final-field { background: #f0f2f6; color: #3443be; font-weight: 650; }
+    .row label.name { font-weight: 650; }
+    input[type=number] { width: 100%; min-width: 0; border: 1px solid #cfd7e3; border-radius: 10px; padding: 11px 12px; font: inherit; font-size: 1rem; outline: none; }
+    input[type=number]:focus { border-color: #5969e8; box-shadow: 0 0 0 3px #5969e81c; }
+    input[type=number]:disabled { background: #f0f2f6; color: #9aa3b1; cursor: pointer; }
+    input::placeholder { color: #9aa3b1; opacity: 1; }
+    .exclude { display: flex; align-items: center; gap: 6px; white-space: nowrap; color: #535f72; font-size: .9rem; cursor: pointer; }
+    .exclude input { width: 17px; height: 17px; accent-color: #5969e8; }
+    .result { margin-top: 26px; padding: 22px; border-radius: 14px; background: #f0f2ff; }
+    .result-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+    .result-metric { min-width: 0; }
+    .result-metric select { width: 100%; margin-top: 7px; border: 1px solid #cfd7e3; border-radius: 9px; padding: 9px 11px; background: white; color: #192230; font: inherit; }
+    .result-metric output { margin-top: 8px; }
+    .adjust-value.is-positive, .adjust-value.is-lucky { color: #d93025; }
+    .adjust-value.is-low { color: #2563c7; }
+    .adjust-value.is-ideal { color: #16803c; }
+    .adjust-status { min-height: 1.4em; margin-top: 2px; color: #192230; font-size: .92rem; font-weight: 600; }
+    @media (max-width: 680px) { .result-metrics { grid-template-columns: 1fr; gap: 14px; } }
+    .buffs { margin-top: 16px; border-top: 1px solid #d9defa; padding-top: 14px; display: grid; grid-template-columns: 1fr; gap: 12px; }
+    .buffs-title { grid-column: 1 / -1; color: #515d84; font-size: .88rem; font-weight: 650; }
+    .buff-option { display: flex; align-items: center; gap: 8px; color: #535f72; font-size: .9rem; line-height: 1.45; white-space: normal; }
+    .buff-option input[type=checkbox] { width: 16px; height: 16px; accent-color: #5969e8; margin: 0; }
+    .buff-custom { grid-column: 1 / -1; width: 100%; border: 1px solid #cfd7e3; border-radius: 9px; padding: 10px 12px; font: inherit; font-size: .95rem; }
+    @media (max-width: 420px) { .result { padding: 18px; } .buffs { grid-template-columns: 1fr; gap: 12px; } }
+    .result-label { color: #515d84; font-size: .9rem; }
+    output { display: block; margin-top: 4px; font-size: 2rem; font-weight: 750; letter-spacing: -.04em; color: #3443be; font-variant-numeric: tabular-nums; }
+    .formula { margin: 18px 0 0; color: #7b8595; font-size: .83rem; line-height: 1.6; }
+    @media (max-width: 420px) { main { padding: 22px 18px; } .fields { gap: 7px; } input[type=number] { padding: 10px 8px; font-size: .93rem; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>아하 속도 계산기</h1>
+    <p class="intro">캐릭터별 기본 속도와 마을 속도를 입력하면, 최종 속도가 높은 순서대로 S₁~S₄에 배정해요.</p>
+    <form id="calculator" autocomplete="off">
+      <div class="table-wrap">
+        <div class="speed-table">
+          <div class="speed-table-head"><span></span><span>캐릭터 기본 속도</span><span>캐릭터 마을 속도</span><span>최종 속도</span></div>
+          <div class="row">
+            <div class="character"><label class="name" for="basic1">캐릭터 1</label><label class="exclude"><input type="checkbox" tabindex="-1" data-index="1"> 비환락</label></div>
+            <div class="fields"><input id="basic1" class="speed-field" data-character="1" type="number" step="any" inputmode="decimal" placeholder="기본 속도"><input id="town1" class="speed-field" data-character="1" type="number" step="any" inputmode="decimal" placeholder="마을 속도"><input id="final1" class="final-field" type="number" tabindex="-1" readonly aria-label="캐릭터 1 최종 속도" value="0"></div>
+          </div>
+          <div class="row">
+            <div class="character"><label class="name" for="basic2">캐릭터 2</label><label class="exclude"><input type="checkbox" tabindex="-1" data-index="2"> 비환락</label></div>
+            <div class="fields"><input id="basic2" class="speed-field" data-character="2" type="number" step="any" inputmode="decimal" placeholder="기본 속도"><input id="town2" class="speed-field" data-character="2" type="number" step="any" inputmode="decimal" placeholder="마을 속도"><input id="final2" class="final-field" type="number" tabindex="-1" readonly aria-label="캐릭터 2 최종 속도" value="0"></div>
+          </div>
+          <div class="row">
+            <div class="character"><label class="name" for="basic3">캐릭터 3</label><label class="exclude"><input type="checkbox" tabindex="-1" data-index="3"> 비환락</label></div>
+            <div class="fields"><input id="basic3" class="speed-field" data-character="3" type="number" step="any" inputmode="decimal" placeholder="기본 속도"><input id="town3" class="speed-field" data-character="3" type="number" step="any" inputmode="decimal" placeholder="마을 속도"><input id="final3" class="final-field" type="number" tabindex="-1" readonly aria-label="캐릭터 3 최종 속도" value="0"></div>
+          </div>
+          <div class="row">
+            <div class="character"><label class="name" for="basic4">캐릭터 4</label><label class="exclude"><input type="checkbox" tabindex="-1" data-index="4"> 비환락</label></div>
+            <div class="fields"><input id="basic4" class="speed-field" data-character="4" type="number" step="any" inputmode="decimal" placeholder="기본 속도"><input id="town4" class="speed-field" data-character="4" type="number" step="any" inputmode="decimal" placeholder="마을 속도"><input id="final4" class="final-field" type="number" tabindex="-1" readonly aria-label="캐릭터 4 최종 속도" value="0"></div>
+          </div>
+        </div>
+      </div>
+    </form>
+    <section class="result" aria-live="polite">
+      <div class="result-metrics">
+        <div class="result-metric"><div class="result-label">아하 타임 속도</div><output id="result">80</output></div>
+        <div class="result-metric"><label class="result-label" for="sparkySelect">스파키 속도</label><select id="sparkySelect"><option value="1">캐릭터 1</option><option value="2">캐릭터 2</option><option value="3">캐릭터 3</option><option value="4">캐릭터 4</option></select><output id="sparkySpeed">0</output></div>
+        <div class="result-metric"><div class="result-label">조정 필요 속도</div><output id="adjustSpeed" class="adjust-value">-80.0</output><div id="adjustStatus" class="adjust-status"></div></div>
+      </div>
+      <div class="buffs" aria-label="추가 버프">
+        <div class="buffs-title">추가 버프</div>
+        <label class="buff-option"><input class="percent-buff" type="checkbox" value="12"> 효광 2돌 (12%)</label>
+        <label class="buff-option"><input class="percent-buff" type="checkbox" value="12"> 곽향 1돌 (12%)</label>
+        <label class="buff-option"><input class="percent-buff" type="checkbox" value="30"> 히아킨 2돌 (30%)</label>
+        <label class="buff-option"><input class="percent-buff" type="checkbox" value="8"> 엠포 2셋 (8%)</label>
+        <label class="buff-option"><input class="percent-buff" type="checkbox" value="12"> 메신저 4셋 (12%)</label>
+        <input id="otherBuff" class="buff-custom" type="number" step="any" inputmode="decimal" placeholder="기타 버프 (%)">
+      </div>
+    </section>
+    <p class="formula">공식: 80 + S₁ ÷ 5 + S₂ ÷ 10 + S₃ ÷ 20 + S₄ ÷ 40<br>기본 속도에 버프 퍼센트를 적용한 뒤 마을 속도와의 차이를 더해 캐릭터별 최종 속도를 계산해요. 비환락 체크 시 해당 캐릭터는 0으로 계산돼요. 버프는 기본 속도에만 적용돼요: 기본 속도 × (1 + 버프 합계) + (마을 속도 − 기본 속도).</p>
+  </main>
+  <script>
+    const divisors = [5, 10, 20, 40];
+    const result = document.getElementById('result');
+    const fields = [...document.querySelectorAll('.speed-field')];
+
+    fields.forEach(field => field.addEventListener('input', calculate));
+    document.querySelectorAll('.percent-buff').forEach(box => box.addEventListener('change', calculate));
+    document.getElementById('otherBuff').addEventListener('input', calculate);
+    document.getElementById('sparkySelect').addEventListener('change', calculate);
+
+    document.querySelectorAll('.exclude input').forEach(box => box.addEventListener('change', () => {
+      const row = box.closest('.row');
+      row.querySelectorAll('.speed-field').forEach(field => {
+        field.disabled = box.checked;
+      });
+      updateSparkyOptions();
+    }));
+
+    updateSparkyOptions();
+
+    function updateSparkyOptions() {
+      const select = document.getElementById('sparkySelect');
+      const previous = select.value;
+      const available = [...document.querySelectorAll('.exclude input')]
+        .filter(box => !box.checked)
+        .map(box => box.dataset.index);
+      select.replaceChildren(...available.map(index => {
+        const option = document.createElement('option');
+        option.value = index;
+        option.textContent = `캐릭터 ${index}`;
+        return option;
+      }));
+      select.disabled = available.length === 0;
+      if (available.includes(previous)) select.value = previous;
+      else if (available.length) select.value = available[0];
+      calculate();
+    }
+    function calculate() {
+      const checkedPercent = [...document.querySelectorAll('.percent-buff:checked')].reduce((total, box) => total + Number(box.value), 0);
+      const otherPercent = Number(document.getElementById('otherBuff').value) || 0;
+      const buffRate = (checkedPercent + otherPercent) / 100;
+      const rankedSpeeds = [1, 2, 3, 4].map(character => {
+        const excluded = document.querySelector(`[data-index="${character}"]`).checked;
+        if (excluded) {
+          document.getElementById(`final${character}`).value = 0;
+          return 0;
+        }
+        const characterFields = fields.filter(field => field.dataset.character === String(character));
+        const readValue = field => field.value.trim() !== '' && Number.isFinite(Number(field.value)) ? Number(field.value) : 0;
+        const baseSpeed = readValue(characterFields.find(field => field.id.startsWith('basic')));
+        const townSpeed = readValue(characterFields.find(field => field.id.startsWith('town')));
+        const finalSpeed = baseSpeed * (1 + buffRate) + (townSpeed - baseSpeed);
+        document.getElementById(`final${character}`).value = Number(finalSpeed.toFixed(10));
+        return finalSpeed;
+      }).sort((a, b) => b - a);
+      const speed = 80 + rankedSpeeds.reduce((total, value, i) => total + value / divisors[i], 0);
+      result.value = Number(speed.toFixed(10)).toLocaleString('ko-KR', { maximumFractionDigits: 10 });
+      const sparkySelect = document.getElementById('sparkySelect');
+      const sparkySpeedOutput = document.getElementById('sparkySpeed');
+      const adjustmentOutput = document.getElementById('adjustSpeed');
+      const statusOutput = document.getElementById('adjustStatus');
+      if (!sparkySelect.value) {
+        sparkySpeedOutput.value = '—';
+        adjustmentOutput.value = '—';
+        adjustmentOutput.className = 'adjust-value';
+        statusOutput.textContent = '';
+        return;
+      }
+      const sparkyFinal = Number(document.getElementById(`final${sparkySelect.value}`).value) || 0;
+      sparkySpeedOutput.value = Number(sparkyFinal.toFixed(10)).toLocaleString('ko-KR', { maximumFractionDigits: 10 });
+      const adjustment = Number((speed - sparkyFinal).toFixed(1));
+      adjustmentOutput.value = `${adjustment > 0 ? '+' : ''}${adjustment.toFixed(1)}`;
+      adjustmentOutput.className = 'adjust-value';
+      statusOutput.textContent = '';
+      if (adjustment > 0) {
+        adjustmentOutput.classList.add('is-positive');
+        statusOutput.textContent = '조정 필요';
+      } else if (adjustment < -10) {
+        adjustmentOutput.classList.add('is-low');
+        statusOutput.textContent = '조정 권장';
+      } else if (adjustment >= -3 && adjustment <= -0.2) {
+        adjustmentOutput.classList.add('is-ideal');
+        statusOutput.textContent = '적정 수치';
+      } else if (adjustment >= -0.1 && adjustment <= 0) {
+        adjustmentOutput.classList.add('is-lucky');
+        statusOutput.textContent = '비틱';
+      }
+    }
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
