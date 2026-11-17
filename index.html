@@ -107,7 +107,7 @@
     </section>
     <div class="share-panel">
       <button id="copyShareLink" type="button">설정 링크 복사</button>
-      <input id="shareLink" type="text" readonly aria-label="공유 설정 링크" placeholder="버튼을 누르면 현재 설정을 담은 링크가 만들어져요">
+      <input id="shareLink" type="text" readonly aria-label="공유 설정 링크" placeholder="설정을 바꾸면 주소가 자동으로 갱신돼요">
       <div id="shareStatus" class="share-status" aria-live="polite"></div>
     </div>
     <div id="formulaInfo" class="formula">
@@ -150,15 +150,26 @@
         select.dataset.previous = select.value;
         updateCharacter(index);
         updateCharacterOptions();
+        syncSettingsToAddress();
       });
     });
-    speedFields.forEach(field => field.addEventListener('input', calculate));
-    document.querySelectorAll('.percent-buff').forEach(box => box.addEventListener('change', calculate));
-    document.getElementById('otherBuff').addEventListener('input', calculate);
+    speedFields.forEach(field => field.addEventListener('input', () => {
+      calculate();
+      syncSettingsToAddress();
+    }));
+    document.querySelectorAll('.percent-buff').forEach(box => box.addEventListener('change', () => {
+      calculate();
+      syncSettingsToAddress();
+    }));
+    document.getElementById('otherBuff').addEventListener('input', () => {
+      calculate();
+      syncSettingsToAddress();
+    });
     document.getElementById('ahaParty').addEventListener('change', () => {
       document.getElementById('formulaInfo').classList.toggle('party-active', document.getElementById('ahaParty').checked);
       updateFormulaBase();
       calculate();
+      syncSettingsToAddress();
     });
     document.getElementById('ahaLightCone').addEventListener('change', () => {
       characterSelects.forEach(select => {
@@ -166,6 +177,7 @@
       });
       updateFormulaBase();
       calculate();
+      syncSettingsToAddress();
     });
     function updateCharacter(index) {
       const select = document.getElementById(`character${index}`);
@@ -233,6 +245,16 @@
       return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
     }
 
+    function syncSettingsToAddress() {
+      const shareUrl = location.protocol === 'file:'
+        ? new URL('https://makerucia.github.io/-Aha-instant-Calc-/')
+        : new URL(location.href);
+      shareUrl.hash = `aha=${encodeSharedSettings()}`;
+      if (location.protocol !== 'file:') history.replaceState(null, '', shareUrl);
+      document.getElementById('shareLink').value = shareUrl.toString();
+      document.getElementById('shareStatus').textContent = '';
+    }
+
     function restoreSharedSettings() {
       const match = location.hash.match(/^#aha=([A-Za-z0-9_-]+)$/);
       if (!match) return;
@@ -265,19 +287,16 @@
         });
         updateFormulaBase();
         updateCharacterOptions();
+        syncSettingsToAddress();
       } catch {
         // Ignore malformed or unsupported share links and leave the calculator at its defaults.
       }
     }
 
     document.getElementById('copyShareLink').addEventListener('click', async () => {
-      const shareUrl = location.protocol === 'file:'
-        ? new URL('https://makerucia.github.io/-Aha-instant-Calc-/')
-        : new URL(location.href);
-      shareUrl.hash = `aha=${encodeSharedSettings()}`;
+      syncSettingsToAddress();
       const shareLinkField = document.getElementById('shareLink');
       const shareStatus = document.getElementById('shareStatus');
-      shareLinkField.value = shareUrl.toString();
       try {
         await navigator.clipboard.writeText(shareLinkField.value);
         shareStatus.textContent = '현재 설정이 담긴 링크를 복사했어요.';
