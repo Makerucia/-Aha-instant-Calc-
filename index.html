@@ -215,43 +215,92 @@
       calculate();
     }
 
-    function encodeSharedSettings() {
-      const settings = {
-        v: 1,
-        c: characterSelects.map(select => select.value),
-        b: characterSelects.map(select => select.value === '기타'
-          ? document.getElementById(`basic${select.dataset.index}`).value
-          : ''),
-        t: characterSelects.map(select => select.value
-          ? document.getElementById(`town${select.dataset.index}`).value
-          : ''),
-        p: [...document.querySelectorAll('.percent-buff')].map(box => box.checked),
-        o: document.getElementById('otherBuff').value,
-        a: document.getElementById('ahaParty').checked,
-        l: document.getElementById('ahaLightCone').checked
-      };
-      const bytes = new TextEncoder().encode(JSON.stringify(settings));
+    function encodeBase64Url(bytes) {
       let binary = '';
       bytes.forEach(byte => { binary += String.fromCharCode(byte); });
       return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
     }
 
-    function syncSettingsToAddress() {
-      if (location.protocol === 'file:') return;
-      const shareUrl = new URL(location.href);
-      shareUrl.hash = `aha=${encodeSharedSettings()}`;
-      history.replaceState(null, '', shareUrl);
+    function decodeBase64Url(value) {
+      const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64 + '='.repeat((4 - base64.length % 4) % 4);
+      return Uint8Array.from(atob(padded), character => character.charCodeAt(0));
     }
 
-    function restoreSharedSettings() {
+    async function encodeSharedSettings() {
+      const settings = [
+        2,
+        characterSelects.map(select => select.value ? characterNames.indexOf(select.value) + 1 : 0),
+        characterSelects.map(select => select.value === '기타'
+          ? document.getElementById(`basic${select.dataset.index}`).value
+          : ''),
+        characterSelects.map(select => select.value
+          ? document.getElementById(`town${select.dataset.index}`).value
+          : ''),
+        [...document.querySelectorAll('.percent-buff')].reduce((mask, box, index) =>
+          box.checked ? mask | (1 << index) : mask, 0),
+        document.getElementById('otherBuff').value,
+        document.getElementById('ahaParty').checked ? 1 : 0,
+        document.getElementById('ahaLightCone').checked ? 1 : 0
+      ];
+      const bytes = new TextEncoder().encode(JSON.stringify(settings));
+      if (typeof CompressionStream === 'function') {
+        try {
+          const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'));
+          const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
+          if (compressed.length < bytes.length) return `d${encodeBase64Url(compressed)}`;
+        } catch {
+          // Fall back to the compact, uncompressed form when compression is unavailable.
+        }
+      }
+      return `j${encodeBase64Url(bytes)}`;
+    }
+
+    let addressSyncRevision = 0;
+    function syncSettingsToAddress() {
+      if (location.protocol === 'file:') return;
+      const revision = ++addressSyncRevision;
+      encodeSharedSettings().then(payload => {
+        if (revision !== addressSyncRevision) return;
+        const shareUrl = new URL(location.href);
+        shareUrl.hash = `aha=${payload}`;
+        history.replaceState(null, '', shareUrl);
+      });
+    }
+
+    async function decodeSharedSettings(token) {
+      let bytes;
+      if (token.startsWith('d')) {
+        const stream = new Blob([decodeBase64Url(token.slice(1))]).stream()
+          .pipeThrough(new DecompressionStream('deflate'));
+        bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+      } else if (token.startsWith('j')) {
+        bytes = decodeBase64Url(token.slice(1));
+      } else {
+        // Continue accepting links created with the original Base64-only format.
+        bytes = decodeBase64Url(token);
+      }
+      const decoded = JSON.parse(new TextDecoder().decode(bytes));
+      if (!Array.isArray(decoded)) return decoded;
+      if (decoded[0] !== 2 || !Array.isArray(decoded[1]) || decoded[1].length !== 4) return null;
+      return {
+        v: 1,
+        c: decoded[1].map(id => id ? characterNames[id - 1] || '' : ''),
+        b: decoded[2],
+        t: decoded[3],
+        p: [...document.querySelectorAll('.percent-buff')].map((_, index) => Boolean(decoded[4] & (1 << index))),
+        o: decoded[5],
+        a: Boolean(decoded[6]),
+        l: Boolean(decoded[7])
+      };
+    }
+
+    async function restoreSharedSettings() {
       const match = location.hash.match(/^#aha=([A-Za-z0-9_-]+)$/);
       if (!match) return;
       try {
-        const base64 = match[1].replace(/-/g, '+').replace(/_/g, '/');
-        const padded = base64 + '='.repeat((4 - base64.length % 4) % 4);
-        const bytes = Uint8Array.from(atob(padded), character => character.charCodeAt(0));
-        const settings = JSON.parse(new TextDecoder().decode(bytes));
-        if (settings.v !== 1 || !Array.isArray(settings.c) || settings.c.length !== 4) return;
+        const settings = await decodeSharedSettings(match[1]);
+        if (!settings || settings.v !== 1 || !Array.isArray(settings.c) || settings.c.length !== 4) return;
         const selections = settings.c.map(name => characterNames.includes(name) ? name : '');
         if (new Set(selections.filter(Boolean)).size !== selections.filter(Boolean).length) return;
 
@@ -342,8 +391,7 @@
       }
     }
 
-    restoreSharedSettings();
-    calculate();
+    restoreSharedSettings().then(calculate);
   </script>
 </body>
 </html>
