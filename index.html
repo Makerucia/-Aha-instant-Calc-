@@ -40,10 +40,6 @@
     .buff-option { display: flex; align-items: center; gap: 8px; color: #535f72; font-size: .9rem; line-height: 1.45; white-space: normal; }
     .buff-option input[type=checkbox] { width: 16px; height: 16px; accent-color: #5969e8; margin: 0; }
     .buff-custom { width: 100%; border: 1px solid #cfd7e3; border-radius: 9px; padding: 10px 12px; font: inherit; font-size: .95rem; }
-    .share-panel { margin-top: 18px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 9px; }
-    .share-panel button { border: 0; border-radius: 9px; padding: 10px 14px; background: #5969e8; color: #fff; font: inherit; font-weight: 650; cursor: pointer; }
-    .share-panel input { min-width: 0; border: 1px solid #cfd7e3; border-radius: 9px; padding: 10px 12px; font: inherit; color: #535f72; }
-    .share-status { grid-column: 1 / -1; min-height: 1.3em; color: #16803c; font-size: .88rem; }
     .result-label { color: #515d84; font-size: .9rem; }
     output { display: block; margin-top: 4px; font-size: 2rem; font-weight: 750; letter-spacing: -.04em; color: #3443be; font-variant-numeric: tabular-nums; }
     .formula { margin: 18px 0 0; color: #7b8595; font-size: .83rem; line-height: 1.7; }
@@ -105,11 +101,6 @@
         <input id="otherBuff" class="buff-custom" type="number" step="any" inputmode="decimal" placeholder="기타 버프 (%)">
       </div>
     </section>
-    <div class="share-panel">
-      <button id="copyShareLink" type="button">설정 링크 복사</button>
-      <input id="shareLink" type="text" readonly aria-label="공유 설정 링크" placeholder="설정을 바꾸면 주소가 자동으로 갱신돼요">
-      <div id="shareStatus" class="share-status" aria-live="polite"></div>
-    </div>
     <div id="formulaInfo" class="formula">
       <div>현재 아하 타임 계산 공식: <span id="ahaFormulaBase">80</span> + S₁ ÷ 5 + S₂ ÷ 10 + S₃ ÷ 20 + S₄ ÷ 40</div>
       <div>속도는 마을 기본 속도에 추가 속도 버프를 더해 캐릭터별 최종 속도를 계산해요.</div>
@@ -246,13 +237,10 @@
     }
 
     function syncSettingsToAddress() {
-      const shareUrl = location.protocol === 'file:'
-        ? new URL('https://makerucia.github.io/-Aha-instant-Calc-/')
-        : new URL(location.href);
+      if (location.protocol === 'file:') return;
+      const shareUrl = new URL(location.href);
       shareUrl.hash = `aha=${encodeSharedSettings()}`;
-      if (location.protocol !== 'file:') history.replaceState(null, '', shareUrl);
-      document.getElementById('shareLink').value = shareUrl.toString();
-      document.getElementById('shareStatus').textContent = '';
+      history.replaceState(null, '', shareUrl);
     }
 
     function restoreSharedSettings() {
@@ -292,20 +280,6 @@
         // Ignore malformed or unsupported share links and leave the calculator at its defaults.
       }
     }
-
-    document.getElementById('copyShareLink').addEventListener('click', async () => {
-      syncSettingsToAddress();
-      const shareLinkField = document.getElementById('shareLink');
-      const shareStatus = document.getElementById('shareStatus');
-      try {
-        await navigator.clipboard.writeText(shareLinkField.value);
-        shareStatus.textContent = '현재 설정이 담긴 링크를 복사했어요.';
-      } catch {
-        shareLinkField.focus();
-        shareLinkField.select();
-        shareStatus.textContent = '링크를 선택했어요. Ctrl+C로 복사해 주세요.';
-      }
-    });
 
     function readNumber(field) {
       if (!field || field.value.trim() === '') return null;
