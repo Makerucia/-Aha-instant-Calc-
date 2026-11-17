@@ -40,6 +40,10 @@
     .buff-option { display: flex; align-items: center; gap: 8px; color: #535f72; font-size: .9rem; line-height: 1.45; white-space: normal; }
     .buff-option input[type=checkbox] { width: 16px; height: 16px; accent-color: #5969e8; margin: 0; }
     .buff-custom { width: 100%; border: 1px solid #cfd7e3; border-radius: 9px; padding: 10px 12px; font: inherit; font-size: .95rem; }
+    .share-panel { margin-top: 18px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 9px; }
+    .share-panel button { border: 0; border-radius: 9px; padding: 10px 14px; background: #5969e8; color: #fff; font: inherit; font-weight: 650; cursor: pointer; }
+    .share-panel input { min-width: 0; border: 1px solid #cfd7e3; border-radius: 9px; padding: 10px 12px; font: inherit; color: #535f72; }
+    .share-status { grid-column: 1 / -1; min-height: 1.3em; color: #16803c; font-size: .88rem; }
     .result-label { color: #515d84; font-size: .9rem; }
     output { display: block; margin-top: 4px; font-size: 2rem; font-weight: 750; letter-spacing: -.04em; color: #3443be; font-variant-numeric: tabular-nums; }
     .formula { margin: 18px 0 0; color: #7b8595; font-size: .83rem; line-height: 1.7; }
@@ -101,6 +105,11 @@
         <input id="otherBuff" class="buff-custom" type="number" step="any" inputmode="decimal" placeholder="기타 버프 (%)">
       </div>
     </section>
+    <div class="share-panel">
+      <button id="copyShareLink" type="button">설정 링크 복사</button>
+      <input id="shareLink" type="text" readonly aria-label="공유 설정 링크" placeholder="버튼을 누르면 현재 설정을 담은 링크가 만들어져요">
+      <div id="shareStatus" class="share-status" aria-live="polite"></div>
+    </div>
     <div id="formulaInfo" class="formula">
       <div>현재 아하 타임 계산 공식: <span id="ahaFormulaBase">80</span> + S₁ ÷ 5 + S₂ ÷ 10 + S₃ ÷ 20 + S₄ ÷ 40</div>
       <div>속도는 마을 기본 속도에 추가 속도 버프를 더해 캐릭터별 최종 속도를 계산해요.</div>
@@ -203,6 +212,82 @@
       calculate();
     }
 
+    function encodeSharedSettings() {
+      const settings = {
+        v: 1,
+        c: characterSelects.map(select => select.value),
+        b: characterSelects.map(select => select.value === '기타'
+          ? document.getElementById(`basic${select.dataset.index}`).value
+          : ''),
+        t: characterSelects.map(select => select.value
+          ? document.getElementById(`town${select.dataset.index}`).value
+          : ''),
+        p: [...document.querySelectorAll('.percent-buff')].map(box => box.checked),
+        o: document.getElementById('otherBuff').value,
+        a: document.getElementById('ahaParty').checked,
+        l: document.getElementById('ahaLightCone').checked
+      };
+      const bytes = new TextEncoder().encode(JSON.stringify(settings));
+      let binary = '';
+      bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    }
+
+    function restoreSharedSettings() {
+      const match = location.hash.match(/^#aha=([A-Za-z0-9_-]+)$/);
+      if (!match) return;
+      try {
+        const base64 = match[1].replace(/-/g, '+').replace(/_/g, '/');
+        const padded = base64 + '='.repeat((4 - base64.length % 4) % 4);
+        const bytes = Uint8Array.from(atob(padded), character => character.charCodeAt(0));
+        const settings = JSON.parse(new TextDecoder().decode(bytes));
+        if (settings.v !== 1 || !Array.isArray(settings.c) || settings.c.length !== 4) return;
+        const selections = settings.c.map(name => characterNames.includes(name) ? name : '');
+        if (new Set(selections.filter(Boolean)).size !== selections.filter(Boolean).length) return;
+
+        document.getElementById('ahaParty').checked = Boolean(settings.a);
+        document.getElementById('ahaLightCone').checked = Boolean(settings.l);
+        document.getElementById('formulaInfo').classList.toggle('party-active', Boolean(settings.a));
+        document.querySelectorAll('.percent-buff').forEach((box, index) => {
+          box.checked = Boolean(settings.p?.[index]);
+        });
+        document.getElementById('otherBuff').value = typeof settings.o === 'string' ? settings.o : '';
+        characterSelects.forEach((select, index) => {
+          select.value = selections[index];
+          updateCharacter(select.dataset.index);
+          const basicField = document.getElementById(`basic${select.dataset.index}`);
+          const townField = document.getElementById(`town${select.dataset.index}`);
+          if (select.value === '기타') {
+            basicField.value = typeof settings.b?.[index] === 'string' ? settings.b[index] : '';
+            basicField.dataset.customValue = basicField.value;
+          }
+          townField.value = typeof settings.t?.[index] === 'string' ? settings.t[index] : '';
+        });
+        updateFormulaBase();
+        updateCharacterOptions();
+      } catch {
+        // Ignore malformed or unsupported share links and leave the calculator at its defaults.
+      }
+    }
+
+    document.getElementById('copyShareLink').addEventListener('click', async () => {
+      const shareUrl = location.protocol === 'file:'
+        ? new URL('https://makerucia.github.io/-Aha-instant-Calc-/')
+        : new URL(location.href);
+      shareUrl.hash = `aha=${encodeSharedSettings()}`;
+      const shareLinkField = document.getElementById('shareLink');
+      const shareStatus = document.getElementById('shareStatus');
+      shareLinkField.value = shareUrl.toString();
+      try {
+        await navigator.clipboard.writeText(shareLinkField.value);
+        shareStatus.textContent = '현재 설정이 담긴 링크를 복사했어요.';
+      } catch {
+        shareLinkField.focus();
+        shareLinkField.select();
+        shareStatus.textContent = '링크를 선택했어요. Ctrl+C로 복사해 주세요.';
+      }
+    });
+
     function readNumber(field) {
       if (!field || field.value.trim() === '') return null;
       const value = Number(field.value);
@@ -264,6 +349,7 @@
       }
     }
 
+    restoreSharedSettings();
     calculate();
   </script>
 </body>
